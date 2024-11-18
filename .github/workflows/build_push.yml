@@ -68,6 +68,9 @@ jobs:
           java-version: 17
           distribution: temurin
 
+      - name: Make Gradlew executable
+        run: chmod +x ./gradlew
+
       - name: Prepare signing key
         run: |
           echo ${{ secrets.SIGNING_KEY }} | base64 -d > signingkey.jks
@@ -134,10 +137,13 @@ jobs:
         with:
           repository: akitachi7/tachiomi-extensions
           token: ${{ secrets.BOT_PAT }}
-          ref: repo
+          ref: main
           path: repo
 
-      - name: Deploy repo
+      - name: Set execute permissions for deploy repo script
+        run: chmod +x $GITHUB_WORKSPACE/main/.github/scripts/commit-repo.sh
+
+      - name: Run the deploy repo script
         run: |
           cd repo
           ../main/.github/scripts/commit-repo.sh

@@ -140,7 +140,7 @@ with (REPO_DIR / "index.html").open("w", encoding="utf-8") as f:
     f.write('</pre>\n</body>\n</html>\n')
 
 # Create HTML for regular NSFW repo
-with (NSFW_REPO_DIR / "index.nsfw.html").open("w", encoding="utf-8") as f:
+with (REPO_DIR / "index.nsfw.html").open("w", encoding="utf-8") as f:
     f.write('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>NSFW apks</title>\n</head>\n<body>\n<pre>\n')
     for entry in nsfw_index_data:
         apk_escaped = 'apk/' + html.escape(entry["apk"])
