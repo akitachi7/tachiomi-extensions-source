@@ -1,3 +1,4 @@
+import argparse
 import html
 import json
 import os
@@ -17,88 +18,78 @@ APPLICATION_ICON_320_REGEX = re.compile(
 LANGUAGE_REGEX = re.compile(r"tachiyomi-([^\.]+)")
 
 *_, ANDROID_BUILD_TOOLS = (Path(os.environ["ANDROID_HOME"]) / "build-tools").iterdir()
-REPO_DIR = Path("repo")
-REPO_APK_DIR = REPO_DIR / "apk"
-REPO_ICON_DIR = REPO_DIR / "icon"
 
-REPO_ICON_DIR.mkdir(parents=True, exist_ok=True)
+# Modify REPO_DIR based on command-line argument
+def create_repo(repo_dir):
+    REPO_DIR = Path(repo_dir)
+    REPO_APK_DIR = REPO_DIR / "apk"
+    REPO_ICON_DIR = REPO_DIR / "icon"
 
-with open("output.json", encoding="utf-8") as f:
-    inspector_data = json.load(f)
+    REPO_ICON_DIR.mkdir(parents=True, exist_ok=True)
 
-index_data = []
-index_min_data = []
-nsfw_index_data = []
-nsfw_index_min_data = []
+    with open("output.json", encoding="utf-8") as f:
+        inspector_data = json.load(f)
 
-for apk in REPO_APK_DIR.iterdir():
-    badging = subprocess.check_output(
-        [
-            ANDROID_BUILD_TOOLS / "aapt",
-            "dump",
-            "--include-meta-data",
-            "badging",
-            apk,
-        ]
-    ).decode()
+    index_data = []
+    index_min_data = []
 
-    package_info = next(x for x in badging.splitlines() if x.startswith("package: "))
-    package_name = PACKAGE_NAME_REGEX.search(package_info).group(1)    
-    application_icon = APPLICATION_ICON_320_REGEX.search(badging).group(1)
+    for apk in REPO_APK_DIR.iterdir():
+        badging = subprocess.check_output(
+            [
+                ANDROID_BUILD_TOOLS / "aapt",
+                "dump",
+                "--include-meta-data",
+                "badging",
+                apk,
+            ]
+        ).decode()
 
-    with ZipFile(apk) as z, z.open(application_icon) as i, (
-        REPO_ICON_DIR / f"{package_name}.png"
-    ).open("wb") as f:
-        f.write(i.read())
+        package_info = next(x for x in badging.splitlines() if x.startswith("package: "))
+        package_name = PACKAGE_NAME_REGEX.search(package_info).group(1)
+        application_icon = APPLICATION_ICON_320_REGEX.search(badging).group(1)
 
-    language = LANGUAGE_REGEX.search(apk.name).group(1)
-    sources = inspector_data[package_name]
+        with ZipFile(apk) as z, z.open(application_icon) as i, (
+            REPO_ICON_DIR / f"{package_name}.png"
+        ).open("wb") as f:
+            f.write(i.read())
 
-    if len(sources) == 1:
-        source_language = sources[0]["lang"]
+        language = LANGUAGE_REGEX.search(apk.name).group(1)
+        sources = inspector_data[package_name]
 
-        if (
-            source_language != language
-            and source_language not in {"all", "other"}
-            and language not in {"all", "other"}
-        ):
-            language = source_language
+        if len(sources) == 1:
+            source_language = sources[0]["lang"]
 
-    common_data = {
-        "name": APPLICATION_LABEL_REGEX.search(badging).group(1),
-        "pkg": package_name,
-        "apk": apk.name,
-        "lang": language,
-        "code": int(VERSION_CODE_REGEX.search(package_info).group(1)),
-        "version": VERSION_NAME_REGEX.search(package_info).group(1),
-        "nsfw": int(IS_NSFW_REGEX.search(badging).group(1)),
-    }
-    min_data = {
-        **common_data,
-        "sources": [],
-    }
+            if (
+                source_language != language
+                and source_language not in {"all", "other"}
+                and language not in {"all", "other"}
+            ):
+                language = source_language
 
-    for source in sources:
-        min_data["sources"].append(
-            {
-                "name": source["name"],
-                "lang": source["lang"],
-                "id": source["id"],
-                "baseUrl": source["baseUrl"],
-            }
-        )
+        common_data = {
+            "name": APPLICATION_LABEL_REGEX.search(badging).group(1),
+            "pkg": package_name,
+            "apk": apk.name,
+            "lang": language,
+            "code": int(VERSION_CODE_REGEX.search(package_info).group(1)),
+            "version": VERSION_NAME_REGEX.search(package_info).group(1),
+            "nsfw": int(IS_NSFW_REGEX.search(badging).group(1)),
+        }
+        min_data = {
+            **common_data,
+            "sources": [],
+        }
 
-    if common_data["nsfw"]:  # If NSFW, add to the NSFW index
-        nsfw_index_min_data.append(min_data)
-        nsfw_index_data.append(
-            {
-                **common_data,
-                "hasReadme": 0,
-                "hasChangelog": 0,
-                "sources": sources,
-            }
-        )
-    else:  # Otherwise, regular extension
+        for source in sources:
+            min_data["sources"].append(
+                {
+                    "name": source["name"],
+                    "lang": source["lang"],
+                    "id": source["id"],
+                    "baseUrl": source["baseUrl"],
+                }
+            )
+
         index_min_data.append(min_data)
         index_data.append(
             {
@@ -109,41 +100,31 @@ for apk in REPO_APK_DIR.iterdir():
             }
         )
 
-index_data.sort(key=lambda x: x["pkg"])
-index_min_data.sort(key=lambda x: x["pkg"])
-nsfw_index_data.sort(key=lambda x: x["pkg"])
-nsfw_index_min_data.sort(key=lambda x: x["pkg"])
+    index_data.sort(key=lambda x: x["pkg"])
+    index_min_data.sort(key=lambda x: x["pkg"])
 
-# Save regular index data
-with (REPO_DIR / "index.json").open("w", encoding="utf-8") as f:
-    index_data_str = json.dumps(index_data, ensure_ascii=False, indent=2)
-    f.write(index_data_str)
+    # Save regular index data
+    with (REPO_DIR / "index.json").open("w", encoding="utf-8") as f:
+        index_data_str = json.dumps(index_data, ensure_ascii=False, indent=2)
+        f.write(index_data_str)
 
-with (REPO_DIR / "index.min.json").open("w", encoding="utf-8") as f:
-    json.dump(index_min_data, f, ensure_ascii=False, separators=(",", ":"))
+    with (REPO_DIR / "index.min.json").open("w", encoding="utf-8") as f:
+        json.dump(index_min_data, f, ensure_ascii=False, separators=(",", ":"))
 
-# Save NSFW index data
-with (REPO_DIR / "index.nsfw.json").open("w", encoding="utf-8") as f:
-    nsfw_index_data_str = json.dumps(nsfw_index_data, ensure_ascii=False, indent=2)
-    f.write(nsfw_index_data_str)
+    # Create HTML for regular repo
+    with (REPO_DIR / "index.html").open("w", encoding="utf-8") as f:
+        f.write('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>apks</title>\n</head>\n<body>\n<pre>\n')
+        for entry in index_data:
+            apk_escaped = 'apk/' + html.escape(entry["apk"])
+            name_escaped = html.escape(entry["name"])
+            f.write(f'<a href="{apk_escaped}">{name_escaped}</a>\n')
+        f.write('</pre>\n</body>\n</html>\n')
 
-with (REPO_DIR / "index.nsfw.min.json").open("w", encoding="utf-8") as f:
-    json.dump(nsfw_index_min_data, f, ensure_ascii=False, separators=(",", ":"))
+# Parse command line arguments to accept --dir flag
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Create repository")
+    parser.add_argument("--dir", type=str, required=True, help="Directory for the repo")
+    args = parser.parse_args()
 
-# Create HTML for regular repo
-with (REPO_DIR / "index.html").open("w", encoding="utf-8") as f:
-    f.write('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>apks</title>\n</head>\n<body>\n<pre>\n')
-    for entry in index_data:
-        apk_escaped = 'apk/' + html.escape(entry["apk"])
-        name_escaped = html.escape(entry["name"])
-        f.write(f'<a href="{apk_escaped}">{name_escaped}</a>\n')
-    f.write('</pre>\n</body>\n</html>\n')
-
-# Create HTML for regular NSFW repo
-with (REPO_DIR / "index.nsfw.html").open("w", encoding="utf-8") as f:
-    f.write('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>NSFW apks</title>\n</head>\n<body>\n<pre>\n')
-    for entry in nsfw_index_data:
-        apk_escaped = 'apk/' + html.escape(entry["apk"])
-        name_escaped = html.escape(entry["name"])
-        f.write(f'<a href="{apk_escaped}">{name_escaped}</a>\n')
-    f.write('</pre>\n</body>\n</html>\n')
+    # Call the function with the provided directory
+    create_repo(args.dir)
