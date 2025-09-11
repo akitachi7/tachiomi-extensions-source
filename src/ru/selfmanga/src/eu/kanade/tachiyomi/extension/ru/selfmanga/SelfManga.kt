@@ -11,7 +11,7 @@ import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class SelfManga : GroupLe("SelfManga", "https://selfmanga.live", "ru") {
+class SelfManga : GroupLe("SelfManga", "https://1.selfmanga.live", "ru") {
 
     override val id: Long = 5227602742162454547
 
