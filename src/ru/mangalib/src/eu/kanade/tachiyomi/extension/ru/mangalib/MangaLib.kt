@@ -4,7 +4,7 @@ import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.preference.EditTextPreference
 import eu.kanade.tachiyomi.multisrc.libgroup.LibGroup
-import tachiyomi.utils.getPreferencesLazy
+import keiyoushi.utils.getPreferencesLazy
 
 class MangaLib : LibGroup("MangaLib", "https://mangalib.me", "ru") {
 

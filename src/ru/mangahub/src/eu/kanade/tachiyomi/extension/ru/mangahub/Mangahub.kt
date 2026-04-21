@@ -7,16 +7,16 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.ParsedHttpSource
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.FormBody
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.math.absoluteValue
@@ -33,8 +33,38 @@ open class Mangahub : ParsedHttpSource() {
     override val supportsLatest = true
 
     override val client: OkHttpClient = network.cloudflareClient.newBuilder()
+        .addInterceptor(::confirmAgeInterceptor)
         .rateLimit(2)
         .build()
+
+    private fun confirmAgeInterceptor(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val response = chain.proceed(request)
+
+        if (request.method != "GET" ||
+            response.header("Content-Type")?.contains("text/html") != true
+        ) {
+            return response
+        }
+
+        val document = Jsoup.parse(
+            response.peekBody(Long.MAX_VALUE).string(),
+            request.url.toString(),
+        )
+
+        val formElement = document.selectFirst("#confirm_age__token")
+            ?: return response
+
+        val formBody = FormBody.Builder()
+            .addEncoded(formElement.attr("name"), formElement.attr("value"))
+            .build()
+
+        val confirmAgeRequest = request.newBuilder()
+            .method("POST", formBody)
+            .build()
+
+        return client.newCall(confirmAgeRequest).execute()
+    }
 
     private val userAgentRandomizer = "${Random.nextInt().absoluteValue}"
 
@@ -43,61 +73,74 @@ open class Mangahub : ParsedHttpSource() {
         add("Referer", baseUrl)
     }
 
-    private val json: Json by injectLazy()
+    override fun popularMangaRequest(page: Int): Request {
+        val pageStr = if (page > 1) "?page=$page" else ""
+        return GET("$baseUrl/explore/sort-is-rating$pageStr", headers)
+    }
 
-    override fun popularMangaRequest(page: Int): Request =
-        GET("$baseUrl/explore?filter[sort]=rating&filter[dateStart][left_number]=1900&filter[dateStart][right_number]=2099&page=$page", headers)
+    override fun latestUpdatesRequest(page: Int): Request {
+        val pageStr = if (page > 1) "?page=$page" else ""
+        return GET("$baseUrl/explore/sort-is-update$pageStr", headers)
+    }
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        GET("$baseUrl/explore?filter[sort]=update&filter[dateStart][left_number]=1900&filter[dateStart][right_number]=2099&page=$page", headers)
-
-    override fun popularMangaSelector() = "div.comic-grid-col-xl"
+    override fun popularMangaSelector() = "div.item-grid"
 
     override fun latestUpdatesSelector() = popularMangaSelector()
 
-    override fun popularMangaFromElement(element: Element): SManga {
-        val manga = SManga.create()
-        manga.thumbnail_url = element.select("div.fast-view-layer-scale").attr("data-background-image")
-        manga.title = element.select("a.fw-medium").text()
-        manga.setUrlWithoutDomain(element.select("a.fw-medium").attr("href"))
-        return manga
+    override fun popularMangaFromElement(element: Element): SManga = SManga.create().apply {
+        thumbnail_url = element.selectFirst("img.item-grid-image")?.absUrl("src")
+        title = element.selectFirst("a.fw-medium")!!.text()
+        setUrlWithoutDomain(element.selectFirst("a.fw-medium")!!.absUrl("href"))
     }
 
-    override fun latestUpdatesFromElement(element: Element): SManga =
-        popularMangaFromElement(element)
+    override fun latestUpdatesFromElement(element: Element): SManga = popularMangaFromElement(element)
 
     override fun popularMangaNextPageSelector() = ".page-link:contains(→)"
 
     override fun latestUpdatesNextPageSelector() = popularMangaNextPageSelector()
 
     override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
-        return GET("$baseUrl/search/manga?query=$query&sort=rating_short&page=$page")
+        val url = "$baseUrl/search/title".toHttpUrl().newBuilder().apply {
+            addQueryParameter("query", query)
+            if (page > 1) addQueryParameter("page", page.toString())
+        }
+        return GET(url.build(), headers)
     }
 
     override fun searchMangaSelector() = popularMangaSelector()
 
-    override fun searchMangaFromElement(element: Element): SManga =
-        popularMangaFromElement(element)
+    override fun searchMangaFromElement(element: Element): SManga = popularMangaFromElement(element)
 
     override fun searchMangaNextPageSelector(): String? = popularMangaNextPageSelector()
 
-    override fun chapterListRequest(manga: SManga): Request {
-        return GET(baseUrl + ("/chapters/" + manga.url.removePrefix("/title/")), headers)
-    }
+    override fun chapterListRequest(manga: SManga): Request = GET(baseUrl + manga.url + "/chapters", headers)
 
-    override fun mangaDetailsParse(document: Document): SManga {
-        val manga = SManga.create()
-        manga.author = document.select("div.detail-attr:contains(Автор) div:gt(0)").text() // TODO: Add "Сценарист" and "Художник"
-        manga.genre = document.select(".tags a").joinToString { it.text() }
-        manga.description = document.select("div.markdown-style").text()
-        manga.status = parseStatus(document.select("div.detail-attr:contains(перевод):eq(0)").toString())
-        manga.thumbnail_url = document.select("img.cover-detail").attr("src")
-        return manga
-    }
+    override fun mangaDetailsParse(document: Document): SManga = SManga.create().apply {
+        val authorElement = document.selectFirst(".attr-name:contains(Автор) + .attr-value a")
+        if (authorElement != null) {
+            author = authorElement.text()
+        } else {
+            author = document.selectFirst(".attr-name:contains(Сценарист) + .attr-value a")?.text()
+            artist = document.selectFirst(".attr-name:contains(Художник) + .attr-value a")?.text()
+        }
+        genre = document.select(".tags a").joinToString { it.text() }
+        description = document.selectFirst(".markdown-style.text-expandable-content")?.text()
+        val statusElement = document.selectFirst(".attr-name:contains(Томов) + .attr-value")?.text()
+        status = when {
+            statusElement?.contains("продолжается") == true -> SManga.ONGOING
 
-    private fun parseStatus(elements: String): Int = when {
-        elements.contains("Переведена") or elements.contains("Выпуск завершен") -> SManga.COMPLETED
-        else -> SManga.ONGOING
+            statusElement?.contains("приостановлен") == true -> SManga.ON_HIATUS
+
+            statusElement?.contains("завершен") == true || statusElement?.contains("выпуск прекращён") == true ->
+                if (document.selectFirst(".attr-name:contains(Перевод) + .attr-value")?.text()?.contains("Завершен") == true) {
+                    SManga.COMPLETED
+                } else {
+                    SManga.PUBLISHING_FINISHED
+                }
+
+            else -> SManga.UNKNOWN
+        }
+        thumbnail_url = document.selectFirst("img.cover-detail")?.absUrl("src")
     }
 
     override fun chapterListSelector() = "div.py-2.px-3"
@@ -109,7 +152,7 @@ open class Mangahub : ParsedHttpSource() {
         chapter.date_upload = element.select("div.text-muted").text().let {
             SimpleDateFormat("dd.MM.yyyy", Locale.US).parse(it)?.time ?: 0L
         }
-        chapter.setUrlWithoutDomain(urlElement.attr("href"))
+        chapter.setUrlWithoutDomain(urlElement.absUrl("href"))
         return chapter
     }
 
@@ -125,14 +168,10 @@ open class Mangahub : ParsedHttpSource() {
     }
 
     override fun pageListParse(document: Document): List<Page> {
-        val chapInfo = document.select("reader")
-            .attr("data-store")
-            .replace("&quot;", "\"")
-            .replace("\\/", "/")
-        val chapter = json.parseToJsonElement(chapInfo).jsonObject
-
-        return chapter["scans"]!!.jsonArray.mapIndexed { i, jsonEl ->
-            Page(i, "", "https:" + jsonEl.jsonObject["src"]!!.jsonPrimitive.content)
+        val images = document.select("img.reader-viewer-img")
+        return images.mapIndexed { i, img ->
+            val url = img.attr("data-src").let { if (it.startsWith("//")) "https:$it" else it }
+            Page(i, document.location(), url)
         }
     }
 

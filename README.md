@@ -23,8 +23,6 @@ Check out the repo's [issue backlog](https://github.com/tachiyomiorg/tachiyomi-e
 
 To get started with development, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-It might also be good to read our [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
-
 ## License
 
     Copyright 2015 Javier Tomás

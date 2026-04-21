@@ -5,7 +5,7 @@ it carefully** if you're a new contributor or don't have any experience on the r
 and knowledges.
 
 This guide is not definitive and it's being updated over time. If you find any issue on it, feel
-free to report it through a [Meta Issue](https://github.com/keiyoushi/extensions-source/issues/new?assignees=&labels=Meta+request&template=06_request_meta.yml)
+free to report it through a [Meta Issue](https://github.com/akitachi7/extensions-source/issues/new?assignees=&labels=Meta+request&template=06_request_meta.yml)
 or fixing it directly by submitting a Pull Request.
 
 ## Table of Contents
@@ -52,8 +52,9 @@ that existing contributors will not actively teach them to you.
 ### Tools
 
 - [Android Studio](https://developer.android.com/studio)
-- Emulator or phone with developer options enabled and a recent version of Tachiyomi installed
+- Emulator or phone with developer options enabled and a recent version of Mihon installed
 - [Icon Generator](https://as280093.github.io/AndroidAssetStudio/icons-launcher.html)
+- [Try jsoup](https://try.jsoup.org/)
 
 ### Cloning the repository
 
@@ -68,7 +69,7 @@ small, just do a normal full clone instead.**
 1. Do a partial clone.
     ```bash
     git clone --filter=blob:none --sparse <fork-repo-url>
-    cd extensions/
+    cd extensions-source/
     ```
 2. Configure sparse checkout.
 
@@ -86,7 +87,7 @@ small, just do a normal full clone instead.**
     ```bash
     git sparse-checkout set --cone --sparse-index
     # add project folders
-    git sparse-checkout add buildSrc core gradle lib lib-multisrc
+    git sparse-checkout add buildSrc core gradle lib lib-multisrc utils
     # add a single source
     git sparse-checkout add src/<lang>/<source>
     ```
@@ -124,7 +125,7 @@ small, just do a normal full clone instead.**
 3. Configure remotes.
     ```bash
     # add upstream
-    git remote add upstream <keiyoushi-repo-url>
+    git remote add upstream <akitachi7-repo-url>
     # optionally disable push to upstream
     git remote set-url --push upstream no_pushing
     # optionally fetch main only (ignore all other branches)
@@ -222,6 +223,10 @@ src/<lang>/<mysourcename>/
 should be adapted from the site name, and can only contain lowercase ASCII letters and digits.
 Your extension code must be placed in the package `eu.kanade.tachiyomi.extension.<lang>.<mysourcename>`.
 
+> [!TIP]
+> Additional files in the extension package (like `Dto.kt`, `Filters.kt`, `UrlActivity.kt`)
+> should NOT repeat the extension name (e.g. use `Dto.kt` instead of `MySourceNameDto.kt`).
+
 #### AndroidManifest.xml (optional)
 You only need to create this file if you want to add deep linking to your extension.
 See [URL intent filter](#url-intent-filter) for more information.
@@ -255,13 +260,13 @@ With the example used above, the version would be `1.4.1`.
 #### Extension API
 
 Extensions rely on [extensions-lib](https://github.com/tachiyomiorg/extensions-lib), which provides
-some interfaces and stubs from the [app](https://github.com/tachiyomiorg/tachiyomi) for compilation
-purposes. The actual implementations can be found [here](https://github.com/tachiyomiorg/tachiyomi/tree/master/app/src/main/java/eu/kanade/tachiyomi/source).
+some interfaces and stubs from the [app](https://github.com/mihonapp/mihon) for compilation
+purposes. The actual implementations can be found [here](https://github.com/mihonapp/mihon/tree/main/app/src/main/java/eu/kanade/tachiyomi/source).
 Referencing the actual implementation will help with understanding extensions' call flow.
 
 #### DataImage library
 
-[`lib-dataimage`](https://github.com/keiyoushi/extensions-source/tree/main/lib/dataimage) is a library
+[`lib-dataimage`](https://github.com/akitachi7/extensions-source/tree/main/lib/dataimage) is a library
 for handling [base 64 encoded image data](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URIs)
 using an [OkHttp interceptor](https://square.github.io/okhttp/interceptors/).
 
@@ -273,7 +278,7 @@ dependencies {
 
 #### i18n library
 
-[`lib-i18n`](https://github.com/keiyoushi/extensions-source/tree/main/lib/i18n) is a library for handling
+[`lib-i18n`](https://github.com/akitachi7/extensions-source/tree/main/lib/i18n) is a library for handling
 internationalization in the sources. It allows loading `.properties` files with messages located under
 the `assets/i18n` folder of each extension, that can be used to translate strings under the source.
 
@@ -286,8 +291,8 @@ dependencies {
 #### Additional dependencies
 
 If you find yourself needing additional functionality, you can add more dependencies to your `build.gradle`
-file. Many of [the dependencies](https://github.com/tachiyomiorg/tachiyomi/blob/master/app/build.gradle.kts)
-from the main Tachiyomi app are exposed to extensions by default.
+file. Many of [the dependencies](https://github.com/mihonapp/mihon/blob/main/app/build.gradle.kts)
+from the app are exposed to extensions by default.
 
 > [!NOTE]
 > Several dependencies are already exposed to all extensions via Gradle's version catalog.
@@ -299,7 +304,7 @@ the main app has at the expense of app size.
 
 > [!IMPORTANT]
 > Using `compileOnly` restricts you to versions that must be compatible with those used in
-> [the latest stable version of Tachiyomi](https://github.com/tachiyomiorg/tachiyomi/releases/latest).
+> [the latest stable version of the app](https://github.com/mihonapp/mihon/releases/latest).
 
 ### Extension main class
 
@@ -310,13 +315,13 @@ either `SourceFactory` or extend one of the `Source` implementations: `HttpSourc
 |--------------------|----------------------------------------------------------------------------------------------------------------------------------|
 | `SourceFactory`    | Used to expose multiple `Source`s. Use this in case of a source that supports multiple languages or mirrors of the same website. |
 | `HttpSource`       | For online source, where requests are made using HTTP.                                                                           |
-| `ParsedHttpSource` | Similar to `HttpSource`, but has methods useful for scraping pages.                                                              |
+| `ParsedHttpSource` | Deprecated, use `HttpSource` instead.                                                                                            |
 
 #### Main class key variables
 
 | Field     | Description                                                                                                                                                     |
 |-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `name`    | Name displayed in the "Sources" tab in Tachiyomi.                                                                                                               |
+| `name`    | Name displayed in the "Sources" tab in the app.                                                                                                                 |
 | `baseUrl` | Base URL of the source without any trailing slashes.                                                                                                            |
 | `lang`    | An ISO 639-1 compliant language code (two letters in lower case in most cases, but can also include the country/dialect part by using a simple dash character). |
 | `id`      | Identifier of your source, automatically set in `HttpSource`. It should only be manually overriden if you need to copy an existing autogenerated ID.            |
@@ -334,8 +339,6 @@ a.k.a. the Browse source entry point in the app (invoked by tapping on the sourc
       `MangasPage.hasNextPage` is passed as `true` and `MangasPage.mangas` is not empty.
 - To show the list properly, the app needs `url`, `title` and `thumbnail_url`. You **must** set them
   here. The rest of the fields could be filled later (refer to Manga Details below).
-    - You should set `thumbnail_url` if is available, if not, `getMangaDetails` will be **immediately**
-      called (this will increase network calls heavily and should be avoided).
 
 #### Latest Manga
 
@@ -357,7 +360,7 @@ the source name).
 The search flow have support to filters that can be added to a `FilterList` inside the `getFilterList`
 method. When the user changes the filters' state, they will be passed to the `searchRequest`, and they
 can be iterated to create the request (by getting the `filter.state` value, where the type varies
-depending on the `Filter` used). You can check the filter types available [here](https://github.com/tachiyomiorg/tachiyomi/blob/master/source-api/src/commonMain/kotlin/eu/kanade/tachiyomi/source/model/Filter.kt)
+depending on the `Filter` used). You can check the filter types available [here](https://github.com/mihonapp/mihon/blob/main/source-api/src/commonMain/kotlin/eu/kanade/tachiyomi/source/model/Filter.kt)
 and in the table below.
 
 | Filter             | State type  | Description                                                                                                                                                              |
@@ -407,8 +410,6 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
 
 #### Chapter
 
-- After a chapter list for the manga is fetched and the app is going to cache the data,
-  `prepareNewChapter` will be called.
 - `SChapter.date_upload` is the [UNIX Epoch time](https://en.wikipedia.org/wiki/Unix_time)
   **expressed in milliseconds**.
     - If you don't pass `SChapter.date_upload` and leave it zero, the app will use the default date
@@ -417,13 +418,9 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
       the example below.
 
       ```kotlin
-      private fun parseDate(dateStr: String): Long {
-          return try {
-              dateFormat.parse(dateStr)!!.time
-          } catch (_: ParseException) {
-              0L
-          }
-      }
+      import akitachi7.utils.tryParse
+
+      chapter.date_upload = dateFormat.tryParse(dateStr)
 
       private val dateFormat by lazy {
           SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ENGLISH)
@@ -436,12 +433,7 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
     - If the parsing have any problem, make sure to return `0L` so the app will use the default date
       instead.
     - The app will overwrite dates of existing old chapters **UNLESS** `0L` is returned.
-    - The default date has [changed](https://github.com/tachiyomiorg/tachiyomi/pull/7197) in
-      preview ≥ r4442 or stable > 0.13.4.
-        - In older versions, the default date is always the fetch date.
-        - In newer versions, this is the same if every (new) chapter has `0L` returned.
-        - However, if the source only provides the upload date of the latest chapter, you can now set
-          it to the latest chapter and leave other chapters default. The app will automatically set it (instead of fetch date) to every new chapter and leave old chapters' dates untouched.
+    - If the source only provides the manga's updated date, assign it to the latest chapter only.
 - `getChapterUrl` is called when the user taps "Open in WebView" in the reader.
     - If the source uses an API to fetch the data, consider overriding this method to return the
       chapter absolute URL in the website instead.
@@ -474,16 +466,48 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
 
 #### URL intent filter
 
-Extensions can define URL intent filters by defining it inside a custom `AndroidManifest.xml` file.
-(Example TBD.)
+Extensions can define a URL pattern so that these URLs can be opened in Mihon.
 
-To test if the URL intent filter is working as expected, you can try opening the website in a browser
-and navigating to the endpoint that was added as a filter or clicking a hyperlink. Alternatively,
-you can use the `adb` command below.
+To do this, you need two files:
+- `AndroidManifest.xml` which must be placed in the root directory of your extension (Example: `src/id/riztranslation/AndroidManifest.xml`)
+- `UrlActivity.kt` which should be placed next to your main file. (Example: `src/id/riztranslation/src/eu/kanade/tachiyomi/extension/id/riztranslation/UrlActivity.kt`)
 
-```console
-$ adb shell am start -d "<your-link>" -a android.intent.action.VIEW
+`AndroidManifest.xml` example :
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name=".id.riztranslation.UrlActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="riztranslation.pages.dev"
+                    android:pathPattern="/..*"
+                    android:scheme="https" />
+                <data
+                    android:host="riztranslation.rf.gd"
+                    android:pathPattern="/..*"
+                    android:scheme="https" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
 ```
+
+The `AndroidManifest.xml` file will contain an `android:name` attribute that refers to the “path” of your `UrlActivity.kt` file. For example, if the extension is Riztranslation, the `android:name` will be `.id.riztranslation.UrlActivity`.
+
+Next, you have the `<data android:scheme=“https” android:host=“host” android:pathPattern=“/..*” />` element; you can have it multiple times, which allows you to specify the URL that can be opened in Mihon. You can read more about this [here](https://developer.android.com/guide/topics/manifest/data-element).
+
+Now, as for `UrlActivity`, you can just use the example below.
 
 > [!CAUTION]
 > The activity does not support any Kotlin Intrinsics specific methods or calls,
@@ -492,6 +516,57 @@ $ adb shell am start -d "<your-link>" -a android.intent.action.VIEW
 >
 > You can use Kotlin Intrinsics in the extension source class, this limitation only
 > applies to the activity classes.
+
+To explain how it works, it will trigger Mihon's `SEARCH` action, passing the URL as a query and specifying that it comes from your extension to narrow down the search. Avoid putting any logic in this file; instead, implement it in your extension's class.
+
+```kotlin
+class UrlActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val intentData = intent?.data?.toString()
+        if (intentData != null) {
+            val mainIntent = Intent().apply {
+                action = "eu.kanade.tachiyomi.SEARCH"
+                putExtra("query", intentData)
+                putExtra("filter", packageName)
+            }
+            try {
+                startActivity(mainIntent)
+            } catch (e: ActivityNotFoundException) {
+                Log.e("RiztranslationUrl", e.toString())
+            }
+        } else {
+            Log.e("RiztranslationUrl", "could not parse uri from intent $intent")
+        }
+
+        finish()
+        exitProcess(0)
+    }
+}
+```
+
+Now all you need to do is adapt the search function (`fetchSearchManga`) in your extension so that, given a URL, it returns a single manga that matches that URL. For example:
+```kotlin
+if (query.startsWith("https://")) {
+    val url = query.toHttpUrlOrNull()
+    if (url != null && url.host == baseUrl.toHttpUrl().host) {
+        val typeIndex = url.pathSegments.indexOfFirst { it == "detail" || it == "view" }
+        if (typeIndex != -1 && typeIndex + 1 < url.pathSize) {
+            val id = url.pathSegments[typeIndex + 1]
+            return GET("$apiUrl/Book?select=id,judul,cover&type=not.ilike.*novel*&id=eq.$id", apiHeaders)
+        }
+    }
+}
+```
+
+To test if the URL intent filter is working as expected, you can try opening the website in a browser
+and navigating to the endpoint that was added as a filter or clicking a hyperlink. Alternatively,
+you can use the `adb` command below.
+
+```console
+$ adb shell am start -d "<your-link>" -a android.intent.action.VIEW
+```
+You can find a complete example of how URLs work in the [Riztranslation extension](https://github.com/akitachi7/extensions-source/tree/main/src/id/riztranslation).
 
 #### Update strategy
 
@@ -515,7 +590,7 @@ There is some cases where existing sources changes their name on the website. To
 these changes in the extension, you need to explicity set the `id` to the same old value, otherwise
 it will get changed by the new `name` value and users will be forced to migrate back to the source.
 
-To get the current `id` value before the name change, you can search the source name in the [repository JSON file](https://github.com/akitachi7/tachiomi-extensions/blob/repo/index.json)
+To get the current `id` value before the name change, you can search the source name in the [repository JSON file](https://github.com/akitachi7/extensions/blob/repo/index.json)
 by looking into the `sources` attribute of the extension. When you have the `id` copied, you can
 override it in the source:
 
@@ -538,10 +613,15 @@ The `id` also needs to be explicity set to the old value if you're changing the 
 > a new `id` will be generated and users will be forced to migrate.
 
 ## Multi-source themes
-The `multisrc` module houses source code for generating extensions for cases where multiple source
-sites use the same site generator tool (usually a CMS) for bootsraping their website and this makes
+The `lib-multisrc` directory houses source code that is useful in situations where multiple source
+sites use the same site generator tool (usually a CMS) for bootstrapping their website and this makes
 them similar enough to prompt code reuse through inheritance/composition; which from now on we will
 use the general **theme** term to refer to.
+
+This section needs to be rewritten. Come to the `#programming` channel in our Discord server for help.
+
+<details>
+<summary>Outdated information</summary>
 
 This module contains the *default implementation* for each theme and definitions for each source that
 builds upon that default implementation and also it's overrides upon that default implementation,
@@ -689,45 +769,50 @@ with open(f"{package}/src/{source}.kt", "w") as f:
       `git add` the file you want and `git restore` the others. Another choice is to allow
       `/multisrc/src/main/java/eu/kanade/tachiyomi/multisrc/*` before running the generator.
 
+</details>
+
 ## Running
 
-To make local development more convenient, you can use the following run configuration to launch
-Tachiyomi directly at the Browse panel:
+For local development, use the following run configuration to launch the app directly into the Browse panel.
 
-![](https://i.imgur.com/STy0UFY.png)
+![](https://i.imgur.com/6s2dvax.png)
 
-If you're running a Preview or debug build of Tachiyomi:
-
-```
--W -S -n eu.kanade.tachiyomi.debug/eu.kanade.tachiyomi.ui.main.MainActivity -a eu.kanade.tachiyomi.SHOW_CATALOGUES
-```
-
-And for a release build of Tachiyomi:
+Copy the following into `Launch Flags` for the Debug build of Mihon:
 
 ```
--W -S -n eu.kanade.tachiyomi/eu.kanade.tachiyomi.ui.main.MainActivity -a eu.kanade.tachiyomi.SHOW_CATALOGUES
+-W -S -n app.mihon.dev/eu.kanade.tachiyomi.ui.main.MainActivity -a eu.kanade.tachiyomi.SHOW_CATALOGUES
 ```
+
+For other builds, replace  `app.mihon.dev` with the corresponding package IDs:
+- Release build: `app.mihon`
+- Preview build: `app.mihon.debug`
+
+If the extension builds and runs successfully then the code changes should be ready to test in your local app.
 
 > [!IMPORTANT]
-> If you're deploying to Android 11 or higher, enable the "Always install with package manager" option in the run configurations. Without this option enabled, you might face issues such as Android Studio running an older version of the extension without the modifications you might have done.
+> If you're deploying to Android 11 or higher, enable the `Always install with package manager` option in the run configurations. Without this option enabled, you might face issues such as Android Studio running an older version of the extension without the modifications you might have done.
 
 ## Debugging
 
 ### Android Debugger
 
 > [!IMPORTANT]
-> If you didn't build the main app from source with debug enabled and are using a release/beta APK, you **need** a rooted device.
-> If you are using an emulator instead, make sure you choose a profile **without** Google Play.
+> If you didn't **build the main app** from source with **debug enabled** and are using a release/beta APK, you **need a rooted device**.
+> If you are using an **emulator** instead, make sure you choose a profile **without Google Play**.
 
-You can leverage the Android Debugger to step through your extension while debugging.
+Follow the steps above for building and running locally if you haven't already. Debugging will not work if you did not follow the steps above.
+
+You can leverage the Android Debugger to add breakpoints and step through your extension while debugging.
 
 You *cannot* simply use Android Studio's `Debug 'module.name'` -> this will most likely result in an
 error while launching.
 
 Instead, once you've built and installed your extension on the target device, use
-`Attach Debugger to Android Process` to start debugging Tachiyomi.
+`Attach Debugger to Android Process` to start debugging the app.
 
-![](https://i.imgur.com/muhXyfu.png)
+Inside the `Attach Debugger to Android Process` window, once the app is running on your device and `Show all processes` is checked, you should be able to select `app.mihon.dev` and press OK.
+
+![](https://i.imgur.com/SUhdB52.png)
 
 
 ### Logs
@@ -742,7 +827,7 @@ is to use the [`Logcat`](https://developer.android.com/studio/debug/am-logcat) p
 and filtering by the `OkHttpClient` tag.
 
 To be able to check the calls done by OkHttp, you need to enable verbose logging in the app, that is
-not enabled by default and is only included in the Preview versions of Tachiyomi. To enable it, go to
+not enabled by default. To enable it, go to
 More -> Settings -> Advanced -> Verbose logging. After enabling it, don't forget to restart the app.
 
 Inspecting the Logcat allows you to get a good look at the call flow and it's more than enough in most
@@ -753,7 +838,7 @@ On newer Android Studio versions, you can use its built-in Network Inspector ins
 App Inspection tool window. This feature provides a nice GUI to inspect the requests made in the app.
 
 To use it, follow the [official documentation](https://developer.android.com/studio/debug/network-profiler)
-and select Tachiyomi package name in the process list.
+and select the app's package name in the process list.
 
 ### Using external network inspecting tools
 If you want to take a deeper look into the network flow, such as taking a look into the request and
@@ -826,7 +911,7 @@ class MySource : HttpSource() {
 ```
 
 Note: `10.0.2.2` is usually the address of your loopback interface in the android emulator. If
-Tachiyomi tells you that it's unable to connect to 10.0.2.2:8080 you will likely need to change it
+the app tells you that it's unable to connect to 10.0.2.2:8080 you will likely need to change it
 (the same if you are using hardware device).
 
 If all went well, you should see all requests and responses made by the source in the web interface
